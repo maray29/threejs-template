@@ -23,6 +23,7 @@ export const ParticleShaderMaterial = new ShaderMaterial({
     uColor3: { value: new Color(0x9b7235) },
     time: { value: 0 },
     resolution: { value: new Vector4() },
+    progress: { value: 0.0 },
   },
   depthTest: true,
   depthWrite: false,

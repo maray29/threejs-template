@@ -13,10 +13,20 @@ export class Debug {
     // this.#createShadedBoxConfig()
     this.#createLightConfig();
     this.#createPosProcessingHelper();
+    this.#createProgress();
   }
 
   refresh() {
     this.pane.refresh();
+  }
+
+  #createProgress() {
+    const folder = this.pane.addFolder({ title: "Progress" });
+    folder.addInput(this.app.params, "progress", {
+      label: "Progress",
+      min: 0.0,
+      max: 1.0,
+    });
   }
 
   #createPosProcessingHelper() {
