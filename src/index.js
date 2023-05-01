@@ -17,7 +17,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 import { SampleShaderMaterial } from "./materials/SampleShaderMaterial";
-import { ParticleShaderMaterial } from "./materials/SampleShaderMaterial/ParticleShaderMaterial";
+import { ParticleShaderMaterial } from "./materials/ParticleShaderMaterial";
 import { gltfLoader, rhinoLoader } from "./loaders";
 
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
@@ -25,6 +25,8 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { AberrationShader } from "./AberrationShader.js";
+
+import { gsap } from "gsap";
 
 class App {
   #resizeCallback = () => this.#onResize();
@@ -40,6 +42,7 @@ class App {
       bloomStrength: 0.3,
       bloomThreshold: 0.15,
       bloomRadius: 0.1,
+      progress: 0.2,
     };
 
     this.hasPhysics = opts.physics;
@@ -70,6 +73,7 @@ class App {
     this.#addListeners();
 
     await this.#loadModel();
+    this.#createParticles();
 
     this.#initPostProcessing();
 
@@ -107,6 +111,7 @@ class App {
     // this.shadedBox.rotation.z = elapsed * 0.6;
 
     this.plane.rotation.z = elapsed * 0.025;
+    this.particles.rotation.z = elapsed * 0.025;
     // this.curves.rotation.z = elapsed * 0.05;
 
     if (this.bloomPass) {
@@ -114,6 +119,9 @@ class App {
       this.bloomPass.strength = this.params.bloomStrength;
       this.bloomPass.radius = this.params.bloomRadius;
     }
+
+    // this.material.uniforms.progress.value = this.params.progress;
+    this.material.uniforms.time.value = elapsed * 0.45;
 
     // console.log(
     //   "Camera position:",
@@ -265,6 +273,7 @@ class App {
     // this.material = SampleShaderMaterial.clone();
     this.material = ParticleShaderMaterial.clone();
     // this.material.wireframe = true;
+    console.log("Material", this.material.uniforms);
 
     this.plane = new THREE.Points(this.geometry, this.material);
 
@@ -277,7 +286,16 @@ class App {
       colorRandoms.set([Math.random()], i);
     }
 
-    console.log(randoms);
+    let originalZ = new Float32Array(this.number);
+
+    for (let i = 0; i < this.number; i += 3) {
+      originalZ.set([this.geometry.attributes.position.array[i + 2]], i / 3);
+    }
+
+    this.geometry.setAttribute(
+      "originalZ",
+      new THREE.BufferAttribute(originalZ, 1)
+    );
 
     this.geometry.setAttribute(
       "randoms",
@@ -292,6 +310,46 @@ class App {
     console.log(this.plane);
     console.log(this.geometry.attributes.position.array.length);
     this.scene.add(this.plane);
+
+    this.#animateTerrain();
+  }
+
+  #animateTerrain() {
+    gsap.to(this.material.uniforms.progress, {
+      value: 1,
+      ease: "power4.out",
+      duration: 4,
+      // repeat: -1,
+      // yoyo: true,
+    });
+  }
+
+  #createParticles() {
+    const particlesCount = 2000;
+    const positions = new Float32Array(particlesCount * 3);
+
+    for (let i = 0; i < particlesCount; i++) {
+      positions[i * 3 + 0] = (Math.random() - 0.5) * 100;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+      positions[i * 3 + 2] = Math.random() * 50;
+    }
+
+    const particleGeometry = new THREE.BufferGeometry();
+
+    particleGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3)
+    );
+
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xffeded,
+      sizeAttenuation: true,
+      size: 0.05,
+    });
+
+    this.particles = new THREE.Points(particleGeometry, particleMaterial);
+    this.scene.add(this.particles);
+    console.log("hello");
   }
 
   #processObject(object) {
