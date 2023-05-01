@@ -26,6 +26,10 @@ Create the build:
 
 Deployed through Github, npm and jsdlvr.
 
+## Credits
+
+Three.js repository template from Francesco Michelini.
+
 ## License
 
 [MIT](./LICENSE)
