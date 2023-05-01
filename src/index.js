@@ -1,4 +1,3 @@
-
 import {
   Scene,
   WebGLRenderer,
@@ -10,218 +9,368 @@ import {
   Clock,
   Vector2,
   PlaneGeometry,
-  MeshBasicMaterial
-} from 'three'
+  MeshBasicMaterial,
+} from "three";
 
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import * as THREE from "three";
 
-import { SampleShaderMaterial } from './materials/SampleShaderMaterial'
-import { gltfLoader } from './loaders'
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+
+import { SampleShaderMaterial } from "./materials/SampleShaderMaterial";
+import { ParticleShaderMaterial } from "./materials/SampleShaderMaterial/ParticleShaderMaterial";
+import { gltfLoader, rhinoLoader } from "./loaders";
+
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { AberrationShader } from "./AberrationShader.js";
 
 class App {
-  #resizeCallback = () => this.#onResize()
+  #resizeCallback = () => this.#onResize();
 
   constructor(container, opts = { physics: false, debug: false }) {
-    this.container = document.querySelector(container)
-    this.screen = new Vector2(this.container.clientWidth, this.container.clientHeight)
+    this.container = document.querySelector(container);
+    this.screen = new Vector2(
+      this.container.clientWidth,
+      this.container.clientHeight
+    );
 
-    this.hasPhysics = opts.physics
-    this.hasDebug = opts.debug
+    this.params = {
+      bloomStrength: 0.3,
+      bloomThreshold: 0.15,
+      bloomRadius: 0.1,
+    };
+
+    this.hasPhysics = opts.physics;
+    this.hasDebug = opts.debug;
   }
 
   async init() {
-    this.#createScene()
-    this.#createCamera()
-    this.#createRenderer()
+    this.#createScene();
+    this.#createRenderer();
+    this.#createCamera();
+    this.#createControls();
 
     if (this.hasPhysics) {
-      const { Simulation } = await import('./physics/Simulation')
-      this.simulation = new Simulation(this)
+      const { Simulation } = await import("./physics/Simulation");
+      this.simulation = new Simulation(this);
 
-      const { PhysicsBox } = await import('./physics/Box')
-      const { PhysicsFloor } = await import('./physics/Floor')
+      const { PhysicsBox } = await import("./physics/Box");
+      const { PhysicsFloor } = await import("./physics/Floor");
 
-      Object.assign(this, { PhysicsBox, PhysicsFloor })
+      Object.assign(this, { PhysicsBox, PhysicsFloor });
     }
 
-    this.#createBox()
-    this.#createShadedBox()
-    this.#createLight()
-    this.#createFloor()
-    this.#createClock()
-    this.#addListeners()
-    this.#createControls()
+    // this.#createBox();
+    // this.#createShadedBox();
+    this.#createLight();
+    // this.#createFloor();
+    this.#createClock();
+    this.#addListeners();
 
-    await this.#loadModel()
+    await this.#loadModel();
+
+    this.#initPostProcessing();
 
     if (this.hasDebug) {
-      const { Debug } = await import('./Debug.js')
-      new Debug(this)
+      const { Debug } = await import("./Debug.js");
+      new Debug(this);
 
-      const { default: Stats } = await import('stats.js')
-      this.stats = new Stats()
-      document.body.appendChild(this.stats.dom)
+      const { default: Stats } = await import("stats.js");
+      this.stats = new Stats();
+      document.body.appendChild(this.stats.dom);
     }
 
     this.renderer.setAnimationLoop(() => {
-      this.stats?.begin()
+      this.stats?.begin();
 
-      this.#update()
-      this.#render()
+      this.#update();
 
-      this.stats?.end()
-    })
+      this.#render();
 
-    console.log(this)
+      this.stats?.end();
+    });
+
+    console.log(this);
   }
 
   destroy() {
-    this.renderer.dispose()
-    this.#removeListeners()
+    this.renderer.dispose();
+    this.#removeListeners();
   }
 
   #update() {
-    const elapsed = this.clock.getElapsedTime()
+    const elapsed = this.clock.getElapsedTime();
 
-    this.shadedBox.rotation.y = elapsed
-    this.shadedBox.rotation.z = elapsed*0.6
+    // this.shadedBox.rotation.y = elapsed;
+    // this.shadedBox.rotation.z = elapsed * 0.6;
 
-    this.simulation?.update()
+    this.plane.rotation.z = elapsed * 0.025;
+    // this.curves.rotation.z = elapsed * 0.05;
+
+    if (this.bloomPass) {
+      this.bloomPass.threshold = this.params.bloomThreshold;
+      this.bloomPass.strength = this.params.bloomStrength;
+      this.bloomPass.radius = this.params.bloomRadius;
+    }
+
+    // console.log(
+    //   "Camera position:",
+    //   this.camera.position.x,
+    //   this.camera.position.y,
+    //   this.camera.position.z
+    // );
+    // console.log(
+    //   "LookAt position:",
+    //   this.controls.target.x,
+    //   this.controls.target.y,
+    //   this.controls.target.z
+    // );
+
+    this.simulation?.update();
+  }
+
+  #initPostProcessing() {
+    this.renderScene = new RenderPass(this.scene, this.camera);
+
+    this.bloomPass = new UnrealBloomPass(
+      new Vector2(window.innerWidth, window.innerHeight, 0.1, 0.1, 0.1)
+    );
+
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(this.renderScene);
+    this.composer.addPass(this.bloomPass);
+
+    this.effect1 = new ShaderPass(AberrationShader);
+    this.composer.addPass(this.effect1);
   }
 
   #render() {
-    this.renderer.render(this.scene, this.camera)
+    // this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 
   #createScene() {
-    this.scene = new Scene()
+    THREE.Object3D.DefaultUp = new THREE.Vector3(0, 0, 1);
+    this.scene = new Scene();
   }
 
   #createCamera() {
-    this.camera = new PerspectiveCamera(75, this.screen.x / this.screen.y, 0.1, 100)
-    this.camera.position.set(-0.7, 0.8, 3)
+    this.camera = new PerspectiveCamera(
+      75,
+      this.screen.x / this.screen.y,
+      0.1,
+      100
+    );
+    this.camera.position.set(7.5, 4.5, 30);
+    // this.camera.lookAt(-6, -6, 4);
   }
 
   #createRenderer() {
     this.renderer = new WebGLRenderer({
       alpha: true,
-      antialias: window.devicePixelRatio === 1
-    })
+      antialias: window.devicePixelRatio === 1,
+    });
 
-    this.container.appendChild(this.renderer.domElement)
+    this.container.appendChild(this.renderer.domElement);
 
-    this.renderer.setSize(this.screen.x, this.screen.y)
-    this.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio))
-    this.renderer.setClearColor(0x121212)
-    this.renderer.physicallyCorrectLights = true
+    this.renderer.setSize(this.screen.x, this.screen.y);
+    this.renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio));
+    this.renderer.setClearColor(0x1f1f26);
+    this.renderer.physicallyCorrectLights = true;
   }
 
   #createLight() {
-    this.pointLight = new PointLight(0xff0055, 500, 100, 2)
-    this.pointLight.position.set(0, 10, 13)
-    this.scene.add(this.pointLight)
+    this.pointLight = new PointLight(0xff0055, 500, 100, 2);
+    this.pointLight.position.set(0, 10, 13);
+    this.scene.add(this.pointLight);
   }
 
   /**
    * Create a box with a PBR material
    */
   #createBox() {
-    const geometry = new BoxGeometry(1, 1, 1, 1, 1, 1)
+    const geometry = new BoxGeometry(1, 1, 1, 1, 1, 1);
 
     const material = new MeshStandardMaterial({
       color: 0xffffff,
       metalness: 0.7,
-      roughness: 0.35
-    })
+      roughness: 0.35,
+    });
 
-    this.box = new Mesh(geometry, material)
-    this.box.position.x = -1.5
+    this.box = new Mesh(geometry, material);
+    this.box.position.x = -1.5;
     this.box.rotation.set(
       Math.random() * Math.PI,
       Math.random() * Math.PI,
       Math.random() * Math.PI
-    )
+    );
 
-    this.scene.add(this.box)
+    this.scene.add(this.box);
 
-    if (!this.hasPhysics) return
+    if (!this.hasPhysics) return;
 
-    const body = new this.PhysicsBox(this.box, this.scene)
-    this.simulation.addItem(body)
+    const body = new this.PhysicsBox(this.box, this.scene);
+    this.simulation.addItem(body);
   }
 
   /**
    * Create a box with a custom ShaderMaterial
    */
   #createShadedBox() {
-    const geometry = new BoxGeometry(1, 1, 1, 1, 1, 1)
+    const geometry = new BoxGeometry(1, 1, 1, 1, 1, 1);
 
-    this.shadedBox = new Mesh(geometry, SampleShaderMaterial)
-    this.shadedBox.position.x = 1.5
+    this.shadedBox = new Mesh(geometry, SampleShaderMaterial);
+    this.shadedBox.position.x = 1.5;
 
-    this.scene.add(this.shadedBox)
+    this.scene.add(this.shadedBox);
   }
 
   #createFloor() {
-    if (!this.hasPhysics) return
+    if (!this.hasPhysics) return;
 
-    const geometry = new PlaneGeometry(20, 20, 1, 1)
-    const material = new MeshBasicMaterial({ color: 0x424242 })
+    const geometry = new PlaneGeometry(20, 20, 1, 1);
+    const material = new MeshBasicMaterial({ color: 0x424242 });
 
-    this.floor = new Mesh(geometry, material)
-    this.floor.rotateX(-Math.PI*0.5)
-    this.floor.position.set(0, -2, 0)
+    this.floor = new Mesh(geometry, material);
+    this.floor.rotateX(-Math.PI * 0.5);
+    this.floor.position.set(0, -2, 0);
 
-    this.scene.add(this.floor)
+    this.scene.add(this.floor);
 
-    const body = new this.PhysicsFloor(this.floor, this.scene)
-    this.simulation.addItem(body)
+    const body = new this.PhysicsFloor(this.floor, this.scene);
+    this.simulation.addItem(body);
   }
 
   /**
    * Load a 3D model and append it to the scene
    */
   async #loadModel() {
-    const gltf = await gltfLoader.load('/suzanne.glb')
+    // const r3dm2 = await rhinoLoader.load("/terrain-02-lines.3dm");
 
-    const mesh = gltf.scene.children[0]
-    mesh.position.z = 1.5
+    // this.#processObject(r3dm2);
 
-    mesh.material = SampleShaderMaterial.clone()
-    mesh.material.wireframe = true
+    const r3dm = await rhinoLoader.load("/terrain-02.3dm");
 
-    this.scene.add(mesh)
+    this.mesh = r3dm.children[0];
+    // this.mesh.rotation.z = -Math.PI / 2;
+    // this.mesh.updateMatrixWorld();
+
+    // this.mesh.material = SampleShaderMaterial.clone();
+    // this.mesh.material.wireframe = true;
+
+    this.geometry = this.mesh.geometry;
+    // this.geometry.center();
+    // this.material = SampleShaderMaterial.clone();
+    this.material = ParticleShaderMaterial.clone();
+    // this.material.wireframe = true;
+
+    this.plane = new THREE.Points(this.geometry, this.material);
+
+    this.number = this.geometry.attributes.position.array.length;
+    let randoms = new Float32Array(this.number / 3);
+    let colorRandoms = new Float32Array(this.number / 3);
+
+    for (let i = 0; i < this.number / 3; i++) {
+      randoms.set([Math.random()], i);
+      colorRandoms.set([Math.random()], i);
+    }
+
+    console.log(randoms);
+
+    this.geometry.setAttribute(
+      "randoms",
+      new THREE.BufferAttribute(randoms, 1)
+    );
+
+    this.geometry.setAttribute(
+      "colorRandoms",
+      new THREE.BufferAttribute(colorRandoms, 1)
+    );
+
+    console.log(this.plane);
+    console.log(this.geometry.attributes.position.array.length);
+    this.scene.add(this.plane);
+  }
+
+  #processObject(object) {
+    const lines = object.children.filter(
+      (child) => child instanceof THREE.Line
+    );
+
+    const curves = lines.map((line) =>
+      this.#extractCurve(line, object.matrixWorld)
+    );
+
+    this.curves = new THREE.Group();
+
+    curves.forEach((curve) => {
+      const curvePoints = curve.getPoints(300);
+      const curveGeometry = new THREE.BufferGeometry().setFromPoints(
+        curvePoints
+      );
+      const curveMaterial = new THREE.LineBasicMaterial({ color: 0xa35330 });
+
+      const curveLine = new THREE.Line(curveGeometry, curveMaterial);
+      this.curves.add(curveLine);
+      // this.scene.add(curveLine);
+    });
+    // this.scene.add(this.curves);
+  }
+
+  #extractCurve(line, matrixWorld) {
+    const pointsArray = line.geometry.getAttribute("position").array;
+    const points = [];
+
+    for (let i = 0; i < pointsArray.length; i += 3) {
+      const point = new THREE.Vector3(
+        pointsArray[i],
+        pointsArray[i + 1],
+        pointsArray[i + 2]
+      );
+      // point.applyMatrix4(matrixWorld);
+      points.push(point);
+    }
+
+    const curve = new THREE.CatmullRomCurve3(points, false, "centripetal");
+
+    return curve;
   }
 
   #createControls() {
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.target.set(-6, -6, 4);
+    this.controls.update();
   }
 
   #createClock() {
-    this.clock = new Clock()
+    this.clock = new Clock();
   }
 
   #addListeners() {
-    window.addEventListener('resize', this.#resizeCallback, { passive: true })
+    window.addEventListener("resize", this.#resizeCallback, { passive: true });
   }
 
   #removeListeners() {
-    window.removeEventListener('resize', this.#resizeCallback, { passive: true })
+    window.removeEventListener("resize", this.#resizeCallback, {
+      passive: true,
+    });
   }
 
   #onResize() {
-    this.screen.set(this.container.clientWidth, this.container.clientHeight)
+    this.screen.set(this.container.clientWidth, this.container.clientHeight);
 
-    this.camera.aspect = this.screen.x / this.screen.y
-    this.camera.updateProjectionMatrix()
+    this.camera.aspect = this.screen.x / this.screen.y;
+    this.camera.updateProjectionMatrix();
 
-    this.renderer.setSize(this.screen.x, this.screen.y)
+    this.renderer.setSize(this.screen.x, this.screen.y);
   }
 }
 
-window._APP_ = new App('#app', {
-  physics: window.location.hash.includes('physics'),
-  debug: window.location.hash.includes('debug')
-})
+window._APP_ = new App("#app", {
+  physics: window.location.hash.includes("physics"),
+  debug: window.location.hash.includes("debug"),
+});
 
-window._APP_.init()
+window._APP_.init();
