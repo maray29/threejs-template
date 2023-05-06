@@ -255,25 +255,16 @@ class App {
    * Load a 3D model and append it to the scene
    */
   async #loadModel() {
-    // const r3dm2 = await rhinoLoader.load("/terrain-02-lines.3dm");
+    // const r3dm2 = await rhinoLoader.load("/terrain-lines.3dm");
 
     // this.#processObject(r3dm2);
 
-    const r3dm = await rhinoLoader.load("/terrain-02.3dm");
+    const r3dm = await rhinoLoader.load("/terrain.3dm");
 
     this.mesh = r3dm.children[0];
-    // this.mesh.rotation.z = -Math.PI / 2;
-    // this.mesh.updateMatrixWorld();
-
-    // this.mesh.material = SampleShaderMaterial.clone();
-    // this.mesh.material.wireframe = true;
 
     this.geometry = this.mesh.geometry;
-    // this.geometry.center();
-    // this.material = SampleShaderMaterial.clone();
     this.material = ParticleShaderMaterial.clone();
-    // this.material.wireframe = true;
-    console.log("Material", this.material.uniforms);
 
     this.plane = new THREE.Points(this.geometry, this.material);
 
@@ -372,7 +363,6 @@ class App {
 
       const curveLine = new THREE.Line(curveGeometry, curveMaterial);
       this.curves.add(curveLine);
-      // this.scene.add(curveLine);
     });
     // this.scene.add(this.curves);
   }
@@ -387,7 +377,6 @@ class App {
         pointsArray[i + 1],
         pointsArray[i + 2]
       );
-      // point.applyMatrix4(matrixWorld);
       points.push(point);
     }
 
